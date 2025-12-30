@@ -1,0 +1,50 @@
+# Node modules
+DEFM_Frontend/node_modules/
+
+# Python virtual environments
+DEFM_Backend/.venv/
+DEFM_Backend/venv/
+
+# Python cache
+**/__pycache__/
+*.pyc
+
+# Environment variables
+*.env
+.env
+DEFM_Backend/.env
+DEFM_Frontend/.env
+
+# Build outputs
+DEFM_Frontend/dist/
+DEFM_Backend/reports/
+DEFM_Backend/logs/
+
+# SQLite databases
+DEFM_Backend/database.db
+DEFM_Backend/app.db
+DEFM_Backend/*.sqlite
+DEFM_Backend/*.sqlite3
+DEFM_Backend/*.db
+
+# Alembic cache
+DEFM_Backend/alembic/versions/__pycache__/
+
+# IDE configs
+.vscode/
+.idea/
+
+# PM2 logs
+.pm2/
+logs/
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# Misc
+*.log
+*.bak
+*.tmp
+*.tar.gz
+*.zip

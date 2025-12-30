@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: defm_postgres
+    environment:
+      POSTGRES_USER: defm_user
+      POSTGRES_PASSWORD: defm_password
+      POSTGRES_DB: defm_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - defm_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U defm_user -d defm_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./DEFM_Backend
+      dockerfile: Dockerfile
+    container_name: defm_backend
+    environment:
+      - DATABASE_URL=postgresql://defm_user:defm_password@postgres:5432/defm_db
+      - SECRET_KEY=your-production-secret-key-change-this
+      - ALLOWED_ORIGINS=http://localhost:3000,http://frontend:80
+      - DEBUG=False
+    volumes:
+      - ./DEFM_Backend/uploads:/app/uploads
+      - ./DEFM_Backend/reports:/app/reports
+      - ./DEFM_Backend/logs:/app/logs
+    ports:
+      - "8000:8000"
+    networks:
+      - defm_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend
+  frontend:
+    build:
+      context: ./DEFM_Frontend
+      dockerfile: Dockerfile
+    container_name: defm_frontend
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    ports:
+      - "3000:80"
+    networks:
+      - defm_network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  defm_network:
+    driver: bridge
