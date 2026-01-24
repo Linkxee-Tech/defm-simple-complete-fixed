@@ -10,6 +10,9 @@ from app.schemas.schemas import Report as ReportSchema, ReportCreate
 from app.api.dependencies import get_current_user, get_audit_service
 from app.services.audit_service import AuditService
 from app.services.report_service import ReportService
+from fastapi.responses import StreamingResponse
+from app.services.report_service import generate_pdf
+
 import logging
 
 router = APIRouter()
@@ -18,6 +21,11 @@ logger = logging.getLogger(__name__)
 # Ensure reports directory exists
 os.makedirs("./reports", exist_ok=True)
 
+@router.get("/{case_id}/pdf", response_model=None)
+def get_case_pdf(case_id: int):
+    pdf = generate_pdf(f"CASE-{case_id}")
+    return StreamingResponse(pdf, media_type="application/pdf")
+    
 @router.get("/", response_model=List[ReportSchema])
 async def read_reports(
     skip: int = 0,

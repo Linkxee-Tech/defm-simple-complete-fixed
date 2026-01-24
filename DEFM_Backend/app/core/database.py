@@ -2,24 +2,33 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
+from dotenv import load_dotenv
 import os
 
 # Ensure the database directory exists for SQLite
-if "sqlite" in settings.DATABASE_URL:
-    db_dir = os.path.dirname(settings.DATABASE_URL.replace("sqlite:///", ""))
-    if db_dir and not os.path.exists(db_dir):
-        os.makedirs(db_dir)
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL not set")
+
+# SQLite-specific handling (Windows safe)
+if DATABASE_URL.startswith("sqlite:///"):
+    db_path = DATABASE_URL.replace("sqlite:///", "")
+    db_dir = os.path.dirname(db_path)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
 
 engine = create_engine(
-    settings.DATABASE_URL,
-    echo=settings.DEBUG,
-    # SQLite specific settings
-    connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
+    DATABASE_URL,
+    connect_args={"check_same_thread": False} if DATABASE_URL.startswith(
+        "sqlite") else {},
 )
-
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
+
 
 def get_db():
     """Database dependency."""
@@ -28,6 +37,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 def create_tables():
     """Create all tables."""

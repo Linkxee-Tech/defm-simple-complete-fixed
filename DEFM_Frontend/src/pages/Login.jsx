@@ -44,7 +44,7 @@ const Login = () => {
             </div>
           </div>
           <h2 className="text-3xl font-bold text-gray-900">
-            Digital Evidence Framework
+            Digital Evidence Framework For Cybercrime Investigations By Shuaibu Yahaya (AMS24CCS0031)
           </h2>
           <p className="mt-2 text-sm text-gray-600">
             Digital Forensics Investigation Platform

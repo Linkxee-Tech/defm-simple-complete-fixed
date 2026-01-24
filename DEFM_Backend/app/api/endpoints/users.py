@@ -5,7 +5,7 @@ from app.core.database import get_db
 from app.models.models import User, UserRole
 from app.schemas.schemas import User as UserSchema, UserCreate, UserUpdate
 from app.core.security import get_password_hash
-from app.api.dependencies import get_current_user, require_admin
+from app.api.dependencies import get_current_user, require_admin, get_audit_service
 from app.services.audit_service import AuditService
 import logging
 
@@ -55,7 +55,7 @@ async def create_user(
     user_create: UserCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
-    audit_service: AuditService = Depends()
+    audit_service: AuditService = Depends(get_audit_service)
 ):
     """Create new user (admin only)."""
     # Check if username already exists
@@ -105,7 +105,7 @@ async def update_user(
     user_update: UserUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    audit_service: AuditService = Depends()
+    audit_service: AuditService = Depends(get_audit_service)
 ):
     """Update user."""
     # Users can only update their own profile unless they're admin
@@ -124,6 +124,9 @@ async def update_user(
     
     # Update fields
     update_data = user_update.model_dump(exclude_unset=True)
+    password = update_data.pop("password", None)
+    if password:
+        db_user.hashed_password = get_password_hash(password)
     for field, value in update_data.items():
         setattr(db_user, field, value)
     
@@ -146,7 +149,7 @@ async def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
-    audit_service: AuditService = Depends()
+    audit_service: AuditService = Depends(get_audit_service)
 ):
     """Delete user (admin only)."""
     db_user = db.query(User).filter(User.id == user_id).first()

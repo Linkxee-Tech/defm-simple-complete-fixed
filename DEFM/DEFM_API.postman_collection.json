@@ -1,0 +1,61 @@
+{
+  "info": {
+    "name": "DEFM API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Dashboard Stats",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/dashboard/stats"
+      }
+    },
+    {
+      "name": "List Cases",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/cases"
+      }
+    },
+    {
+      "name": "Create Case",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/cases",
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"case_number\": \"CASE-001\" }",
+          "options": { "raw": { "language": "json" } }
+        }
+      }
+    },
+    {
+      "name": "Upload Evidence",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/evidence/upload"
+      }
+    },
+    {
+      "name": "Audit Logs",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/audit/logs"
+      }
+    },
+    {
+      "name": "Chain Of Custody",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/chain-of-custody/1"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    }
+  ]
+}

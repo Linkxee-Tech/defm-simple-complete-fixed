@@ -2,15 +2,25 @@
 import axios from 'axios';
 
 // Create axios instance with base configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api/v1`,
   headers: {
-    'Content-Type': 'application/json',
+    'Content-Type': 'application/x-www-form-urlencoded',
   },
   timeout: 30000, // 30 seconds
 });
+
+// Health check function (uses base URL, not /api/v1)
+export const healthCheck = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/health`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
 
 // Request interceptor to add auth token
 api.interceptors.request.use(
@@ -70,20 +80,27 @@ api.interceptors.response.use(
 );
 
 // Authentication API
+// Authentication API
 export const authAPI = {
   login: async (username, password) => {
-    const response = await api.post('/auth/login', { username, password });
-    if (response.data.access_token) {
-      localStorage.setItem('token', response.data.access_token);
-    }
+    const form = new URLSearchParams();
+    form.append('username', username);
+    form.append('password', password);
+
+    const response = await api.post('/auth/login', form);
+
+    const token = response.data?.access_token;
+    if (token) localStorage.setItem('token', token);
+
     return response.data;
   },
-  
+
   logout: () => {
-    localStorage.removeItem('user');
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
   },
 };
+
 
 // Users API
 export const usersAPI = {
@@ -121,6 +138,9 @@ export const evidenceAPI = {
       },
     });
   },
+  download: (id) => api.get(`/evidence/${id}/download`, {
+    responseType: 'blob',
+  }),
   verifyIntegrity: (id) => api.post(`/evidence/${id}/verify-integrity`),
 };
 

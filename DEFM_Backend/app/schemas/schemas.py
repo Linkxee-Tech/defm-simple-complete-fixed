@@ -4,16 +4,20 @@ from typing import Optional, List
 from enum import Enum
 
 # Enums
+
+
 class UserRole(str, Enum):
     admin = "admin"
     manager = "manager"
     investigator = "investigator"
+
 
 class CaseStatus(str, Enum):
     open = "open"
     in_progress = "in_progress"
     closed = "closed"
     archived = "archived"
+
 
 class EvidenceType(str, Enum):
     digital = "digital"
@@ -25,11 +29,13 @@ class EvidenceType(str, Enum):
     log = "log"
     other = "other"
 
+
 class EvidenceStatus(str, Enum):
     collected = "collected"
     analyzed = "analyzed"
     processed = "processed"
     archived = "archived"
+
 
 class Priority(str, Enum):
     low = "low"
@@ -38,6 +44,8 @@ class Priority(str, Enum):
     critical = "critical"
 
 # Base schemas
+
+
 class UserBase(BaseModel):
     username: str
     email: EmailStr
@@ -45,14 +53,25 @@ class UserBase(BaseModel):
     role: UserRole = UserRole.investigator
     is_active: bool = True
 
-class UserCreate(UserBase):
+
+class UserCreate(BaseModel):
+    email: str
     password: str
+
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     full_name: Optional[str] = None
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
+    password: Optional[str] = None
+
+    @validator("password")
+    def validate_password(cls, value):
+        if value is not None and len(value) < 6:
+            raise ValueError("Password must be at least 6 characters long")
+        return value
+
 
 class User(UserBase):
     id: int
@@ -64,19 +83,26 @@ class User(UserBase):
         from_attributes = True
 
 # Token schemas
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str
+
 
 class TokenData(BaseModel):
     username: Optional[str] = None
 
 # Login schema
+
+
 class UserLogin(BaseModel):
     username: str
     password: str
 
 # Case schemas
+
+
 class CaseBase(BaseModel):
     title: str
     description: Optional[str] = None
@@ -88,8 +114,10 @@ class CaseBase(BaseModel):
     client_name: Optional[str] = None
     client_contact: Optional[str] = None
 
+
 class CaseCreate(CaseBase):
     pass
+
 
 class CaseUpdate(BaseModel):
     title: Optional[str] = None
@@ -101,6 +129,7 @@ class CaseUpdate(BaseModel):
     location: Optional[str] = None
     client_name: Optional[str] = None
     client_contact: Optional[str] = None
+
 
 class Case(CaseBase):
     id: int
@@ -116,6 +145,8 @@ class Case(CaseBase):
         from_attributes = True
 
 # Evidence schemas
+
+
 class EvidenceBase(BaseModel):
     title: str
     description: Optional[str] = None
@@ -124,8 +155,10 @@ class EvidenceBase(BaseModel):
     collection_location: Optional[str] = None
     collection_method: Optional[str] = None
 
+
 class EvidenceCreate(EvidenceBase):
     case_id: int
+
 
 class EvidenceUpdate(BaseModel):
     title: Optional[str] = None
@@ -134,6 +167,7 @@ class EvidenceUpdate(BaseModel):
     status: Optional[EvidenceStatus] = None
     collection_location: Optional[str] = None
     collection_method: Optional[str] = None
+
 
 class Evidence(EvidenceBase):
     id: int
@@ -154,7 +188,10 @@ class Evidence(EvidenceBase):
     class Config:
         from_attributes = True
 
+
 # Chain of Custody schemas
+
+
 class ChainOfCustodyBase(BaseModel):
     action: str
     location: Optional[str] = None
@@ -163,8 +200,10 @@ class ChainOfCustodyBase(BaseModel):
     transferred_from: Optional[int] = None
     transferred_to: Optional[int] = None
 
+
 class ChainOfCustodyCreate(ChainOfCustodyBase):
     evidence_id: int
+
 
 class ChainOfCustody(ChainOfCustodyBase):
     id: int
@@ -178,13 +217,17 @@ class ChainOfCustody(ChainOfCustodyBase):
         from_attributes = True
 
 # Report schemas
+
+
 class ReportBase(BaseModel):
     title: str
     content: Optional[str] = None
     report_type: Optional[str] = None
 
+
 class ReportCreate(ReportBase):
     case_id: int
+
 
 class Report(ReportBase):
     id: int
@@ -198,11 +241,15 @@ class Report(ReportBase):
         from_attributes = True
 
 # Evidence Tag schemas
+
+
 class EvidenceTagBase(BaseModel):
     tag_name: str
 
+
 class EvidenceTagCreate(EvidenceTagBase):
     evidence_id: int
+
 
 class EvidenceTag(EvidenceTagBase):
     id: int
@@ -213,6 +260,8 @@ class EvidenceTag(EvidenceTagBase):
         from_attributes = True
 
 # Audit Log schemas
+
+
 class AuditLog(BaseModel):
     id: int
     user_id: int
@@ -229,11 +278,14 @@ class AuditLog(BaseModel):
         from_attributes = True
 
 # Dashboard schemas
+
+
 class DashboardStats(BaseModel):
     total_cases: int
     active_evidence: int
     pending_actions: int
     integrity_alerts: int
+
 
 class RecentActivity(BaseModel):
     id: int
@@ -243,11 +295,14 @@ class RecentActivity(BaseModel):
     time_ago: str
     activity_type: str
 
+
 class DashboardData(BaseModel):
     stats: DashboardStats
     recent_activities: List[RecentActivity]
 
 # File upload schema
+
+
 class FileUpload(BaseModel):
     filename: str
     content_type: str

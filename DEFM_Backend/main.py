@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from contextlib import asynccontextmanager
 from app.core.config import settings
+from app.audit_service import AuditService
 from app.core.database import create_tables
-from app.api.router import api_router
+from app.api.router import api_router  # Fixed import
+from app.core.lifespan import lifespan  # Use imported lifespan
+from fastapi.staticfiles import StaticFiles
 from app.services.initial_data import create_initial_data
 import logging
 import os
@@ -13,43 +15,14 @@ import os
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Application lifespan event handler for startup and shutdown.
-    Compatible with Python 3.11+ and FastAPI 0.103+
-    """
-    # Startup
-    logger.info("Starting Digital Evidence Framework Management (DEFM) Backend")
-    
-    # Create upload directories
-    os.makedirs(settings.UPLOAD_DIRECTORY, exist_ok=True)
-    os.makedirs("./reports", exist_ok=True)
-    os.makedirs("./logs", exist_ok=True)
-    
-    # Create database tables
-    create_tables()
-    logger.info("Database tables created/verified")
-    
-    # Create initial data (users, etc.)
-    create_initial_data()
-    logger.info("Initial data created/verified")
-    
-    logger.info(f"Application started successfully on {settings.APP_NAME} v{settings.APP_VERSION}")
-    
-    yield
-    
-    # Shutdown
-    logger.info("Shutting down Digital Evidence Framework Management Backend")
-
 # Create FastAPI app with lifespan
 app = FastAPI(
-    title=settings.APP_NAME,
-    version=settings.APP_VERSION,
+    title="DEFM API",
+    version="1.0.0",
     description="A comprehensive backend system for managing digital forensic evidence, chain of custody, and case management.",
     docs_url="/docs",
     redoc_url="/redoc",
-    lifespan=lifespan
+    lifespan=lifespan  # Use the imported lifespan
 )
 
 # Add CORS middleware
@@ -73,6 +46,18 @@ async def root():
         "docs": "/docs",
         "status": "running"
     }
+
+@app.get("/dashboard")
+async def dashboard_placeholder():
+    return {"page": "Dashboard", "note": "Handled by frontend"}
+
+@app.get("/admin")
+async def admin_placeholder():
+    return {"page": "Admin", "note": "Handled by frontend"}
+
+@app.get("/investigator")
+async def investigator_placeholder():
+    return {"page": "Investigator", "note": "Handled by frontend"}
 
 @app.get("/health")
 async def health_check():
@@ -100,6 +85,8 @@ async def internal_error_handler(request, exc):
         status_code=500,
         content={"detail": "Internal server error"}
     )
+    
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn

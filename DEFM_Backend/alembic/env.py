@@ -1,15 +1,19 @@
+from app.core.database import Base
+from app.core.config import settings
+from app.models.models import Base
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
 import os
 import sys
+from app.db.base import Base
+from app.models import user, case, evidence, audit, chain_of_custody
+target_metadata = Base.metadata
+
 
 # Add the project root to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from app.models.models import Base
-from app.core.config import settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -68,7 +72,7 @@ def run_migrations_online() -> None:
     """
     # Override the sqlalchemy.url in the config
     config.set_main_option("sqlalchemy.url", get_url())
-    
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section),
         prefix="sqlalchemy.",

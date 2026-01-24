@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from sqlalchemy import desc, func
+from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import desc
 from typing import List, Optional
 from datetime import datetime, timedelta
 from app.core.database import get_db
-from app.models.models import Case, User, Evidence, AuditLog
+from app.models.models import Case, User, Evidence, AuditLog, CaseStatus
 from app.schemas.schemas import (
     Case as CaseSchema, CaseCreate, CaseUpdate,
     DashboardData, DashboardStats, RecentActivity
@@ -27,7 +27,7 @@ async def get_dashboard_data(
         # Get statistics
         total_cases = db.query(Case).count()
         active_evidence = db.query(Evidence).count()
-        pending_actions = db.query(Case).filter(Case.status == "in_progress").count()
+        pending_actions = db.query(Case).filter(Case.status == CaseStatus.in_progress).count()
         integrity_alerts = 2  # Hardcoded for now, can be implemented based on file hash checks
         
         stats = DashboardStats(
@@ -120,11 +120,25 @@ async def read_cases(
     current_user: User = Depends(get_current_user)
 ):
     """Get cases with optional filters."""
-    query = db.query(Case)
+    query = (
+        db.query(Case)
+        .options(
+            selectinload(Case.created_by_user),
+            selectinload(Case.assigned_to_user),
+            selectinload(Case.evidence_items)
+        )
+    )
     
     # Apply filters
     if status:
-        query = query.filter(Case.status == status)
+        try:
+            status_enum = CaseStatus(status)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid case status"
+            )
+        query = query.filter(Case.status == status_enum)
     
     if assigned_to_me:
         query = query.filter(Case.assigned_to == current_user.id)
@@ -139,7 +153,16 @@ async def read_case(
     current_user: User = Depends(get_current_user)
 ):
     """Get case by ID."""
-    case = db.query(Case).filter(Case.id == case_id).first()
+    case = (
+        db.query(Case)
+        .options(
+            selectinload(Case.created_by_user),
+            selectinload(Case.assigned_to_user),
+            selectinload(Case.evidence_items)
+        )
+        .filter(Case.id == case_id)
+        .first()
+    )
     if case is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -208,11 +231,13 @@ async def update_case(
     for field, value in update_data.items():
         setattr(db_case, field, value)
     
-    # Set closed_at when status changes to closed
-    if case_update.status == "closed" and db_case.closed_at is None:
-        db_case.closed_at = datetime.utcnow()
-    elif case_update.status != "closed":
-        db_case.closed_at = None
+    # Set closed_at when status changes
+    if "status" in update_data:
+        new_status = update_data["status"]
+        if new_status == CaseStatus.closed and db_case.closed_at is None:
+            db_case.closed_at = datetime.utcnow()
+        elif new_status != CaseStatus.closed:
+            db_case.closed_at = None
     
     db.commit()
     db.refresh(db_case)

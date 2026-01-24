@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import List, Optional
 from app.core.database import get_db
 from app.models.models import ChainOfCustody, Evidence, User
@@ -7,6 +7,18 @@ from app.schemas.schemas import ChainOfCustody as ChainOfCustodySchema, ChainOfC
 from app.api.dependencies import get_current_user, get_audit_service
 from app.services.audit_service import AuditService
 import logging
+from app.models.chain_of_custody import ChainOfCustody
+
+router = APIRouter(prefix="/chain-of-custody", tags=["Chain of Custody"])
+
+@router.get("/{evidence_id}")
+def get_chain(evidence_id: int, db: Session = Depends(get_db)):
+    return (
+        db.query(ChainOfCustody)
+        .filter(ChainOfCustody.evidence_id == evidence_id)
+        .order_by(ChainOfCustody.timestamp.asc())
+        .all()
+    )
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -20,7 +32,13 @@ async def read_chain_of_custody(
     current_user: User = Depends(get_current_user)
 ):
     """Get chain of custody records with optional filters."""
-    query = db.query(ChainOfCustody)
+    query = (
+        db.query(ChainOfCustody)
+        .options(
+            selectinload(ChainOfCustody.handler_user),
+            selectinload(ChainOfCustody.evidence)
+        )
+    )
     
     # Apply filters
     if evidence_id:
@@ -46,6 +64,10 @@ async def read_evidence_custody_chain(
     
     custody_records = (
         db.query(ChainOfCustody)
+        .options(
+            selectinload(ChainOfCustody.handler_user),
+            selectinload(ChainOfCustody.evidence)
+        )
         .filter(ChainOfCustody.evidence_id == evidence_id)
         .order_by(ChainOfCustody.timestamp.desc())
         .all()
@@ -60,7 +82,15 @@ async def read_custody_record(
     current_user: User = Depends(get_current_user)
 ):
     """Get chain of custody record by ID."""
-    custody_record = db.query(ChainOfCustody).filter(ChainOfCustody.id == custody_id).first()
+    custody_record = (
+        db.query(ChainOfCustody)
+        .options(
+            selectinload(ChainOfCustody.handler_user),
+            selectinload(ChainOfCustody.evidence)
+        )
+        .filter(ChainOfCustody.id == custody_id)
+        .first()
+    )
     if custody_record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

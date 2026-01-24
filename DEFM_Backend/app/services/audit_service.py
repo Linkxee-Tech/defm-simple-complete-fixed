@@ -6,6 +6,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
 class AuditService:
     def __init__(self, db: Session, current_user=None):
         self.db = db
@@ -25,7 +26,7 @@ class AuditService:
             if not self.current_user:
                 logger.warning("Audit log attempted without current user")
                 return
-            
+
             audit_log = AuditLog(
                 user_id=self.current_user.id,
                 action=action,
@@ -35,12 +36,13 @@ class AuditService:
                 ip_address=ip_address,
                 user_agent=user_agent
             )
-            
+
             self.db.add(audit_log)
             self.db.commit()
-            
-            logger.info(f"Audit log created: {action} by user {self.current_user.username}")
-            
+
+            logger.info(
+                f"Audit log created: {action} by user {self.current_user.username}")
+
         except Exception as e:
             logger.error(f"Failed to create audit log: {str(e)}")
             self.db.rollback()
@@ -55,14 +57,14 @@ class AuditService:
     ):
         """Get audit logs with optional filters."""
         query = self.db.query(AuditLog)
-        
+
         if user_id:
             query = query.filter(AuditLog.user_id == user_id)
         if entity_type:
             query = query.filter(AuditLog.entity_type == entity_type)
         if action:
             query = query.filter(AuditLog.action == action)
-        
+
         return query.order_by(AuditLog.timestamp.desc()).offset(skip).limit(limit).all()
 
     def get_entity_audit_trail(self, entity_type: str, entity_id: int):

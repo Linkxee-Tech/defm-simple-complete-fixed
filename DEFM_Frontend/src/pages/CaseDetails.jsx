@@ -10,7 +10,7 @@ import { casesAPI, evidenceAPI } from '../services/api';
 const CaseDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [caseData, setCase Data] = useState(null);
+  const [caseData, setCaseData] = useState(null);
   const [evidence, setEvidence] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('details');

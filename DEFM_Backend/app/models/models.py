@@ -55,7 +55,7 @@ class User(Base):
     created_cases = relationship("Case", back_populates="created_by_user", foreign_keys="Case.created_by")
     assigned_cases = relationship("Case", back_populates="assigned_to_user", foreign_keys="Case.assigned_to")
     evidence_entries = relationship("Evidence", back_populates="collected_by_user")
-    custody_entries = relationship("ChainOfCustody", back_populates="handler_user")
+    custody_entries = relationship("ChainOfCustody", back_populates="handler_user", foreign_keys="ChainOfCustody.handler_id")
     audit_logs = relationship("AuditLog", back_populates="user")
 
 class Case(Base):
