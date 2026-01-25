@@ -1,6 +1,7 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from app.services.initial_data import create_initial_data, get_user_by_username, verify_password
+from app.services.initial_data import authenticate_user
 from app.api.endpoints import (
     auth_router,
     users_router,
@@ -17,23 +18,26 @@ from app.api.endpoints import (
     notifications_router
 )
 from datetime import datetime, timedelta
-from jose import JWTError, jwt
+from jose import jwt
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 api_router = APIRouter()
 
-# Ensure initial admin exists
-create_initial_data()  # This will create admin user if not already present
-
-# JWT settings
-SECRET_KEY = settings.SECRET_KEY if hasattr(settings, "SECRET_KEY") else "mysecretkey123"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60  # 1 hour
+# JWT settings from config
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    """Create JWT access token."""
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta if expires_delta else timedelta(minutes=15))
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -41,13 +45,14 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
 
 @api_router.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    logger.warning(f"Login attempt: {form_data}")
+    """Login endpoint that returns JWT token."""
+    logger.info(f"Login attempt for user: {form_data.username}")
     username = form_data.username
     password = form_data.password
 
-
-    user = get_user_by_username(username)
-    if not user or not verify_password(password, user.hashed_password):
+    user = authenticate_user(username, password)
+    if not user:
+        logger.warning(f"Failed login attempt for user: {username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
@@ -55,9 +60,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
         )
 
     access_token = create_access_token(
-        data={"sub": user.username, "role": user.role.value}
+        data={"sub": user["username"], "role": user["role"]}
     )
 
+    logger.info(f"Successful login for user: {username}")
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -65,10 +71,13 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
 # api_router.include_router(auth_router, prefix="/auth", tags=["authentication"])
 api_router.include_router(users_router, prefix="/users", tags=["users"])
 api_router.include_router(cases_router, prefix="/cases", tags=["cases"])
-api_router.include_router(evidence_router, prefix="/evidence", tags=["evidence"])
-api_router.include_router(chain_of_custody_router, prefix="/chain-of-custody", tags=["chain-of-custody"])
+api_router.include_router(
+    evidence_router, prefix="/evidence", tags=["evidence"])
+api_router.include_router(chain_of_custody_router,
+                          prefix="/chain-of-custody", tags=["chain-of-custody"])
 api_router.include_router(reports_router, prefix="/reports", tags=["reports"])
-api_router.include_router(audit_logs_router, prefix="/audit-logs", tags=["audit-logs"])
+api_router.include_router(
+    audit_logs_router, prefix="/audit-logs", tags=["audit-logs"])
 api_router.include_router(admin_router, prefix="/admin", tags=["admin"])
 api_router.include_router(dashboard_router, tags=["dashboard"])
 api_router.include_router(acquisition_router, tags=["acquisition"])

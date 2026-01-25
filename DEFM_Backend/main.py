@@ -4,10 +4,9 @@ from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.audit_service import AuditService
 from app.core.database import create_tables
-from app.api.router import api_router  # Fixed import
-from app.core.lifespan import lifespan  # Use imported lifespan
+from app.api.router import api_router
+from app.core.lifespan import lifespan
 from fastapi.staticfiles import StaticFiles
-from app.services.initial_data import create_initial_data
 import logging
 import os
 
@@ -22,7 +21,7 @@ app = FastAPI(
     description="A comprehensive backend system for managing digital forensic evidence, chain of custody, and case management.",
     docs_url="/docs",
     redoc_url="/redoc",
-    lifespan=lifespan  # Use the imported lifespan
+    lifespan=lifespan
 )
 
 # Add CORS middleware
@@ -37,6 +36,19 @@ app.add_middleware(
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
 
+
+@app.on_event("startup")
+def on_startup():
+    """Initialize database and create initial data on startup."""
+    try:
+        create_tables()
+        from app.services.initial_data import create_initial_data
+        create_initial_data()
+        logger.info("Database tables ensured and initial data created.")
+    except Exception as e:
+        logger.error(f"Startup initialization failed: {e}")
+
+
 @app.get("/")
 async def root():
     """Root endpoint."""
@@ -47,17 +59,21 @@ async def root():
         "status": "running"
     }
 
+
 @app.get("/dashboard")
 async def dashboard_placeholder():
     return {"page": "Dashboard", "note": "Handled by frontend"}
+
 
 @app.get("/admin")
 async def admin_placeholder():
     return {"page": "Admin", "note": "Handled by frontend"}
 
+
 @app.get("/investigator")
 async def investigator_placeholder():
     return {"page": "Investigator", "note": "Handled by frontend"}
+
 
 @app.get("/health")
 async def health_check():
@@ -69,6 +85,7 @@ async def health_check():
         "version": settings.APP_VERSION
     }
 
+
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
     """Handle 404 errors."""
@@ -76,6 +93,7 @@ async def not_found_handler(request, exc):
         status_code=404,
         content={"detail": "Endpoint not found"}
     )
+
 
 @app.exception_handler(500)
 async def internal_error_handler(request, exc):
@@ -85,8 +103,23 @@ async def internal_error_handler(request, exc):
         status_code=500,
         content={"detail": "Internal server error"}
     )
-    
-app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+
+
+# Guard StaticFiles mount - check for frontend directory
+frontend_dir = "frontend"
+if not os.path.isdir(frontend_dir):
+    # Try alternative location
+    alt_dir = "DEFM_Frontend"
+    if os.path.isdir(alt_dir):
+        frontend_dir = alt_dir
+        logger.info(f"Using alternative frontend directory: {alt_dir}")
+    else:
+        # Create empty frontend directory to prevent crash
+        os.makedirs(frontend_dir, exist_ok=True)
+        logger.warning(
+            f"Frontend directory not found, created empty: {frontend_dir}")
+
+app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,22 +1,17 @@
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal, create_tables
 from app.models.models import User, UserRole
-from app.core.security import get_password_hash
-from passlib.context import CryptContext
+from app.core.security import get_password_hash, verify_password
 import logging
 
 logger = logging.getLogger(__name__)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def create_initial_data():
     """Create initial data for the application after tables exist."""
-    # Ensure tables are created first
     create_tables()
-
     db: Session = SessionLocal()
     try:
-        # Skip if users already exist
         if db.query(User).count() > 0:
             logger.info("Initial users already exist, skipping creation")
             return
@@ -53,14 +48,38 @@ def create_initial_data():
         db.close()
 
 
-# Helper functions for login
-def get_user_by_username(username: str) -> User | None:
+def get_user_by_username(username: str) -> dict | None:
+    """Get user by username and return as dict to avoid detached ORM issues."""
     db: Session = SessionLocal()
     try:
-        return db.query(User).filter(User.username == username).first()
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            return None
+        return {
+            "id": user.id,
+            "username": user.username,
+            "hashed_password": user.hashed_password,
+            "role": user.role.value if user.role else None,
+            "is_active": user.is_active
+        }
     finally:
         db.close()
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+def authenticate_user(username: str, password: str) -> dict | None:
+    """Verify username/password inside DB session to avoid detached object issues."""
+    db: Session = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            return None
+        if not verify_password(password, user.hashed_password):
+            return None
+        return {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role.value if user.role else None,
+            "is_active": user.is_active
+        }
+    finally:
+        db.close()
