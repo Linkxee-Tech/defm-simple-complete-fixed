@@ -53,6 +53,9 @@ class UserBase(BaseModel):
     role: UserRole = UserRole.investigator
     is_active: bool = True
 
+    class Config:
+        orm_mode = True
+
 
 class UserCreate(BaseModel):
     email: str

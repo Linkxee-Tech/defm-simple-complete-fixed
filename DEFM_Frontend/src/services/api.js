@@ -7,9 +7,10 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api/v1`,
   headers: {
-    'Content-Type': 'application/x-www-form-urlencoded',
+    'Content-Type': 'application/json',
   },
   timeout: 30000, // 30 seconds
+  
 });
 
 // Health check function (uses base URL, not /api/v1)
@@ -23,26 +24,34 @@ export const healthCheck = async () => {
 };
 
 // Request interceptor to add auth token
-api.interceptors.request.use(
-  (config) => {
-    const user = localStorage.getItem('user');
-    if (user) {
-      try {
-        const userData = JSON.parse(user);
-        const token = localStorage.getItem('token');
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-      } catch (error) {
-        console.error('Error parsing user data:', error);
-      }
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
+// api.interceptors.request.use(
+//   (config) => {
+//     const user = localStorage.getItem('user');
+//     if (user) {
+//       try {
+//         const userData = JSON.parse(user);
+//         const token = localStorage.getItem('token');
+//         if (token) {
+//           config.headers.Authorization = `Bearer ${token}`;
+//         }
+//       } catch (error) {
+//         console.error('Error parsing user data:', error);
+//       }
+//     }
+//     return config;
+//   },
+//   (error) => {
+//     return Promise.reject(error);
+//   }
+// );
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
-);
+  return config;
+});
 
 // Response interceptor for error handling
 api.interceptors.response.use(
@@ -50,11 +59,11 @@ api.interceptors.response.use(
   (error) => {
     if (error.response) {
       // Handle 401 Unauthorized
-      if (error.response.status === 401) {
-        localStorage.removeItem('user');
-        localStorage.removeItem('token');
-        window.location.href = '/login';
-      }
+      // if (error.response.status === 401) {
+      //   localStorage.removeItem('user');
+      //   localStorage.removeItem('token');
+      //   window.location.href = '/login';
+      // }
       
       // Handle 403 Forbidden
       if (error.response.status === 403) {
@@ -83,12 +92,21 @@ api.interceptors.response.use(
 // Authentication API
 export const authAPI = {
   login: async (username, password) => {
-    const form = new URLSearchParams();
-    form.append('username', username);
-    form.append('password', password);
+    // const form = new URLSearchParams();
+    // form.append('username', username);
+    // form.append('password', password);
+
+    const form = {
+      username: username,
+      password: password
+    };
+
 
     const response = await api.post('/auth/login', form);
 
+    if(response.status == 200){
+      alert("Login Successful");
+    }
     const token = response.data?.access_token;
     if (token) localStorage.setItem('token', token);
 

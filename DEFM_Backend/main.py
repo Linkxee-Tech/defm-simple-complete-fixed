@@ -6,7 +6,6 @@ from app.audit_service import AuditService
 from app.core.database import create_tables
 from app.api.router import api_router  # Fixed import
 from app.core.lifespan import lifespan  # Use imported lifespan
-from fastapi.staticfiles import StaticFiles
 from app.services.initial_data import create_initial_data
 import logging
 import os
@@ -28,10 +27,14 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    # Add your deployed frontend domain here later
+],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 # Include API routes
@@ -85,8 +88,6 @@ async def internal_error_handler(request, exc):
         status_code=500,
         content={"detail": "Internal server error"}
     )
-    
-app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn

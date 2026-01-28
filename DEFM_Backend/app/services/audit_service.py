@@ -1,17 +1,19 @@
 from sqlalchemy.orm import Session
-from app.models.models import AuditLog
-from fastapi import Request
-import logging
+from app.models.models import User, AuditLog
+from datetime import datetime
 from typing import Optional
+import logging
 
 logger = logging.getLogger(__name__)
 
 
 class AuditService:
-    def __init__(self, db: Session, current_user=None):
+    """Service for logging audit trail of user actions."""
+    
+    def __init__(self, db: Session, current_user: User):
         self.db = db
         self.current_user = current_user
-
+    
     async def log_action(
         self,
         action: str,
@@ -20,13 +22,22 @@ class AuditService:
         details: Optional[str] = None,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None
-    ):
-        """Log an audit trail entry."""
+    ) -> AuditLog:
+        """
+        Log an audit action.
+        
+        Args:
+            action: The action performed (e.g., "user_created", "case_updated")
+            entity_type: Type of entity affected (e.g., "user", "case", "evidence")
+            entity_id: ID of the affected entity
+            details: Additional details about the action
+            ip_address: IP address of the user
+            user_agent: User agent string
+            
+        Returns:
+            The created AuditLog entry
+        """
         try:
-            if not self.current_user:
-                logger.warning("Audit log attempted without current user")
-                return
-
             audit_log = AuditLog(
                 user_id=self.current_user.id,
                 action=action,
@@ -34,47 +45,54 @@ class AuditService:
                 entity_id=entity_id,
                 details=details,
                 ip_address=ip_address,
-                user_agent=user_agent
+                user_agent=user_agent,
+                timestamp=datetime.utcnow()
             )
-
+            
             self.db.add(audit_log)
             self.db.commit()
-
+            self.db.refresh(audit_log)
+            
             logger.info(
-                f"Audit log created: {action} by user {self.current_user.username}")
-
+                f"Audit log created: {action} by user {self.current_user.username} "
+                f"on {entity_type}:{entity_id}"
+            )
+            
+            return audit_log
+            
         except Exception as e:
             logger.error(f"Failed to create audit log: {str(e)}")
             self.db.rollback()
-
-    def get_audit_logs(
+            raise
+    
+    def get_logs(
         self,
         skip: int = 0,
         limit: int = 100,
-        user_id: Optional[int] = None,
+        action: Optional[str] = None,
         entity_type: Optional[str] = None,
-        action: Optional[str] = None
+        user_id: Optional[int] = None
     ):
-        """Get audit logs with optional filters."""
+        """
+        Retrieve audit logs with optional filters.
+        
+        Args:
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+            action: Filter by action type
+            entity_type: Filter by entity type
+            user_id: Filter by user ID
+            
+        Returns:
+            List of AuditLog entries
+        """
         query = self.db.query(AuditLog)
-
-        if user_id:
-            query = query.filter(AuditLog.user_id == user_id)
-        if entity_type:
-            query = query.filter(AuditLog.entity_type == entity_type)
+        
         if action:
             query = query.filter(AuditLog.action == action)
-
+        if entity_type:
+            query = query.filter(AuditLog.entity_type == entity_type)
+        if user_id:
+            query = query.filter(AuditLog.user_id == user_id)
+        
         return query.order_by(AuditLog.timestamp.desc()).offset(skip).limit(limit).all()
-
-    def get_entity_audit_trail(self, entity_type: str, entity_id: int):
-        """Get complete audit trail for a specific entity."""
-        return (
-            self.db.query(AuditLog)
-            .filter(
-                AuditLog.entity_type == entity_type,
-                AuditLog.entity_id == entity_id
-            )
-            .order_by(AuditLog.timestamp.desc())
-            .all()
-        )

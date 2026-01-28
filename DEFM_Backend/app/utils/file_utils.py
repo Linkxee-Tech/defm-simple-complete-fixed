@@ -1,134 +1,142 @@
-from fastapi import UploadFile, HTTPException
-from app.core.config import settings
 import hashlib
 import os
-import magic
-from typing import Dict, Any
+from typing import Optional
+from fastapi import UploadFile, HTTPException
+from app.core.config import settings
+import logging
+import aiofiles
 
-def validate_file(file: UploadFile) -> Dict[str, Any]:
-    """Validate uploaded file."""
+logger = logging.getLogger(__name__)
+
+
+async def validate_file(file: UploadFile) -> bool:
+    """
+    Validate uploaded file based on size and type.
+    
+    Args:
+        file: The uploaded file
+        
+    Returns:
+        True if valid
+        
+    Raises:
+        HTTPException: If file is invalid
+    """
+    # Check file size
+    file.file.seek(0, 2)  # Seek to end
+    file_size = file.file.tell()
+    file.file.seek(0)  # Reset to beginning
+    
+    if file_size > settings.MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File size exceeds maximum allowed size of {settings.MAX_FILE_SIZE} bytes"
+        )
+    
+    # Check file extension
+    if file.filename:
+        file_ext = file.filename.split(".")[-1].lower()
+        if file_ext not in settings.allowed_file_types_list:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File type .{file_ext} is not allowed. Allowed types: {', '.join(settings.allowed_file_types_list)}"
+            )
+    
+    return True
+
+
+async def get_file_hash(content: bytes) -> str:
+    """
+    Calculate SHA-256 hash of file content.
+    
+    Args:
+        content: File content as bytes
+        
+    Returns:
+        Hexadecimal hash string
+    """
+    sha256_hash = hashlib.sha256()
+    sha256_hash.update(content)
+    return sha256_hash.hexdigest()
+
+
+async def save_upload_file(
+    file: UploadFile,
+    destination_path: str
+) -> tuple[str, int, str]:
+    """
+    Save uploaded file to disk.
+    
+    Args:
+        file: The uploaded file
+        destination_path: Full path where file should be saved
+        
+    Returns:
+        Tuple of (file_path, file_size, file_hash)
+    """
     try:
-        # Check file size
-        if hasattr(file.file, 'seek') and hasattr(file.file, 'tell'):
-            file.file.seek(0, 2)  # Seek to end
-            file_size = file.file.tell()
-            file.file.seek(0)  # Seek back to start
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(destination_path), exist_ok=True)
+        
+        # Read file content
+        content = await file.read()
+        file_size = len(content)
+        
+        # Calculate hash
+        file_hash = await get_file_hash(content)
+        
+        # Write file
+        async with aiofiles.open(destination_path, 'wb') as f:
+            await f.write(content)
+        
+        logger.info(f"File saved: {destination_path} ({file_size} bytes, hash: {file_hash})")
+        
+        return destination_path, file_size, file_hash
+        
+    except Exception as e:
+        logger.error(f"Failed to save file: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save file: {str(e)}"
+        )
+    finally:
+        await file.seek(0)  # Reset file pointer
+
+
+async def delete_file(file_path: str) -> bool:
+    """
+    Safely delete a file.
+    
+    Args:
+        file_path: Path to the file to delete
+        
+    Returns:
+        True if deleted successfully, False otherwise
+    """
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            logger.info(f"File deleted: {file_path}")
+            return True
         else:
-            file_size = 0
-        
-        if file_size > settings.MAX_FILE_SIZE:
-            return {
-                "valid": False,
-                "error": f"File size ({file_size} bytes) exceeds maximum allowed size ({settings.MAX_FILE_SIZE} bytes)"
-            }
-        
-        # Check file extension
-        if file.filename:
-            file_extension = file.filename.split('.')[-1].lower()
-            if file_extension not in settings.ALLOWED_FILE_TYPES:
-                return {
-                    "valid": False,
-                    "error": f"File type '{file_extension}' is not allowed. Allowed types: {', '.join(settings.ALLOWED_FILE_TYPES)}"
-                }
-        
-        return {"valid": True, "file_size": file_size}
-        
+            logger.warning(f"File not found for deletion: {file_path}")
+            return False
     except Exception as e:
-        return {
-            "valid": False,
-            "error": f"File validation error: {str(e)}"
-        }
+        logger.error(f"Failed to delete file {file_path}: {str(e)}")
+        return False
 
-def get_file_hash(file_path: str, algorithm: str = "sha256") -> str:
-    """Calculate file hash."""
-    hash_algo = hashlib.new(algorithm)
-    
-    try:
-        with open(file_path, 'rb') as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hash_algo.update(chunk)
-        return hash_algo.hexdigest()
-    except Exception as e:
-        raise Exception(f"Error calculating file hash: {str(e)}")
 
-def get_file_info(file_path: str) -> Dict[str, Any]:
-    """Get file information."""
-    try:
-        file_stat = os.stat(file_path)
-        file_info = {
-            "size": file_stat.st_size,
-            "created": file_stat.st_ctime,
-            "modified": file_stat.st_mtime,
-            "hash": get_file_hash(file_path)
-        }
-        
-        # Try to get MIME type using python-magic if available
-        try:
-            import magic
-            file_info["mime_type"] = magic.from_file(file_path, mime=True)
-        except ImportError:
-            # Fallback to basic extension-based detection
-            extension = os.path.splitext(file_path)[1].lower()
-            mime_types = {
-                '.pdf': 'application/pdf',
-                '.txt': 'text/plain',
-                '.doc': 'application/msword',
-                '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                '.jpg': 'image/jpeg',
-                '.jpeg': 'image/jpeg',
-                '.png': 'image/png',
-                '.gif': 'image/gif',
-                '.mp4': 'video/mp4',
-                '.avi': 'video/x-msvideo',
-                '.mov': 'video/quicktime',
-                '.zip': 'application/zip',
-                '.rar': 'application/x-rar-compressed',
-                '.7z': 'application/x-7z-compressed',
-                '.log': 'text/plain'
-            }
-            file_info["mime_type"] = mime_types.get(extension, 'application/octet-stream')
-        
-        return file_info
-        
-    except Exception as e:
-        raise Exception(f"Error getting file info: {str(e)}")
-
-def generate_evidence_number(db, case_number: str) -> str:
-    """Generate unique evidence number for a case."""
-    from app.models.models import Evidence
-    from sqlalchemy import func
+def generate_evidence_number() -> str:
+    """
+    Generate a unique evidence number.
     
-    # Count existing evidence for this case
-    evidence_count = db.query(func.count(Evidence.id)).filter(Evidence.case_id == case_number).scalar() or 0
+    Returns:
+        Evidence number in format EVD-YYYYMMDD-XXXXXX
+    """
+    from datetime import datetime
+    import random
     
-    # Generate evidence number: CASE-EVD-001, CASE-EVD-002, etc.
-    evidence_number = f"{case_number}-EVD-{str(evidence_count + 1).zfill(3)}"
+    date_str = datetime.now().strftime("%Y%m%d")
+    random_str = f"{random.randint(0, 999999):06d}"
     
-    # Ensure uniqueness
-    while db.query(Evidence).filter(Evidence.evidence_number == evidence_number).first():
-        evidence_count += 1
-        evidence_number = f"{case_number}-EVD-{str(evidence_count + 1).zfill(3)}"
-    
-    return evidence_number
-
-def safe_filename(filename: str) -> str:
-    """Create a safe filename by removing/replacing invalid characters."""
-    import re
-    import unicodedata
-    
-    # Remove or replace invalid characters
-    filename = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')
-    filename = re.sub(r'[^\w\s\-_\.]', '', filename).strip()
-    filename = re.sub(r'[-\s]+', '-', filename)
-    
-    return filename
-
-def create_directory_structure(base_path: str, case_id: int, evidence_id: int = None) -> str:
-    """Create directory structure for file storage."""
-    if evidence_id:
-        dir_path = os.path.join(base_path, str(case_id), str(evidence_id))
-    else:
-        dir_path = os.path.join(base_path, str(case_id))
-    
-    os.makedirs(dir_path, exist_ok=True)
-    return dir_path
+    return f"EVD-{date_str}-{random_str}"

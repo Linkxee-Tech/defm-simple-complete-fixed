@@ -3,6 +3,7 @@ from app.core.database import SessionLocal, create_tables
 from app.models.models import User, UserRole
 from app.core.security import get_password_hash
 from passlib.context import CryptContext
+from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ def create_initial_data():
 
 
 # Helper functions for login
-def get_user_by_username(username: str) -> User | None:
+def get_user_by_username(username: str) -> Optional[User]:
     db: Session = SessionLocal()
     try:
         return db.query(User).filter(User.username == username).first()

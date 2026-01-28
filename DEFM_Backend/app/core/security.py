@@ -1,45 +1,71 @@
 from datetime import datetime, timedelta
-import secrets
-import hashlib
+from typing import Optional
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from app.core.config import settings
+import logging
 
-# Temporary placeholder functions until dependencies are installed
+logger = logging.getLogger(__name__)
+
+# Password hashing context
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# JWT settings
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash."""
-    # Simple hash verification for now
-    return hashlib.sha256(plain_password.encode()).hexdigest() == hashed_password
+    """Verify a password against its hash using bcrypt."""
+    return pwd_context.verify(plain_password, hashed_password)
+
 
 def get_password_hash(password: str) -> str:
-    """Hash a password."""
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Hash a password using bcrypt."""
+    return pwd_context.hash(password)
 
-def create_access_token(data: dict, expires_delta: timedelta = None):
-    """Create JWT access token."""
-    # Placeholder for JWT token creation
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Create JWT access token.
+    
+    Args:
+        data: Dictionary containing claims to encode in the token
+        expires_delta: Optional expiration time delta
+        
+    Returns:
+        Encoded JWT token string
+    """
     to_encode = data.copy()
+    
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({"exp": expire})
-    # For now, return a simple encoded string
-    encoded_jwt = f"{to_encode}_{secrets.token_urlsafe(16)}"
+    
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def verify_token(token: str):
-    """Verify JWT token."""
-    # Placeholder for token verification
+
+def verify_token(token: str) -> Optional[dict]:
+    """
+    Verify and decode JWT token.
+    
+    Args:
+        token: JWT token string
+        
+    Returns:
+        Decoded token payload as dictionary, or None if invalid
+    """
     try:
-        # Simple validation for now
-        if "_" in token:
-            return {"sub": "test_user"}
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except JWTError as e:
+        logger.error(f"JWT verification failed: {str(e)}")
         return None
-    except:
+    except Exception as e:
+        logger.error(f"Token verification error: {str(e)}")
         return None
-
-def generate_session_id() -> str:
-    """Generate a secure session ID."""
-    return secrets.token_urlsafe(32)
-
-def create_refresh_token():
-    return secrets.token_urlsafe(64)
