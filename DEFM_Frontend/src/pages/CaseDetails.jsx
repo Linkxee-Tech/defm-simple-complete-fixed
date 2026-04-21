@@ -1,31 +1,89 @@
 // src/pages/CaseDetails.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Edit, Trash2, Clock, User, MapPin, 
-  AlertCircle, FileText, Package, Activity 
+  AlertCircle, FileText, Package, Activity, Save, X
 } from 'lucide-react';
-import { casesAPI, evidenceAPI } from '../services/api';
+import { casesAPI, evidenceAPI, usersAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import Loading from '../components/Loading';
+
+const CASE_STATUS_OPTIONS = [
+  { label: 'Open', value: 'open' },
+  { label: 'In Progress', value: 'in_progress' },
+  { label: 'Closed', value: 'closed' },
+  { label: 'Archived', value: 'archived' },
+];
+
+const PRIORITY_OPTIONS = [
+  { label: 'Low', value: 'low' },
+  { label: 'Medium', value: 'medium' },
+  { label: 'High', value: 'high' },
+  { label: 'Critical', value: 'critical' },
+];
 
 const CaseDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [caseData, setCaseData] = useState(null);
   const [evidence, setEvidence] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('details');
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: '',
+    description: '',
+    status: '',
+    priority: '',
+    assigned_to: '',
+    incident_date: '',
+    location: '',
+    client_name: '',
+    client_contact: ''
+  });
+
+  const canEditCase = useMemo(() => {
+    if (!user || !caseData) return false;
+    // Admin can edit any case
+    if (user.role === 'admin') return true;
+    // Manager can edit any case
+    if (user.role === 'manager') return true;
+    // Investigator can only edit if assigned to this case
+    if (user.role === 'investigator' && caseData.assigned_to === user.id) return true;
+    return false;
+  }, [user, caseData]);
+
+  const canDeleteCase = user?.role === 'admin' || user?.role === 'manager';
 
   useEffect(() => {
     fetchCaseDetails();
     fetchEvidence();
+    fetchUsers();
   }, [id]);
 
   const fetchCaseDetails = async () => {
     try {
       const response = await casesAPI.get(id);
       setCaseData(response.data);
+      setEditForm({
+        title: response.data.title || '',
+        description: response.data.description || '',
+        status: response.data.status || 'open',
+        priority: response.data.priority || 'medium',
+        assigned_to: response.data.assigned_to || '',
+        incident_date: response.data.incident_date ? response.data.incident_date.slice(0, 16) : '',
+        location: response.data.location || '',
+        client_name: response.data.client_name || '',
+        client_contact: response.data.client_contact || ''
+      });
     } catch (error) {
       console.error('Error fetching case:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -35,19 +93,58 @@ const CaseDetails = () => {
       setEvidence(response.data);
     } catch (error) {
       console.error('Error fetching evidence:', error);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const response = await usersAPI.list({ limit: 200 });
+      setUsers(response.data);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    try {
+      setEditLoading(true);
+      const payload = {
+        title: editForm.title,
+        description: editForm.description || null,
+        status: editForm.status,
+        priority: editForm.priority,
+        assigned_to: editForm.assigned_to ? Number(editForm.assigned_to) : null,
+        incident_date: editForm.incident_date ? new Date(editForm.incident_date).toISOString() : null,
+        location: editForm.location || null,
+        client_name: editForm.client_name || null,
+        client_contact: editForm.client_contact || null,
+      };
+
+      await casesAPI.update(id, payload);
+      await fetchCaseDetails();
+      setShowEditModal(false);
+      alert('Case updated successfully!');
+    } catch (error) {
+      console.error('Error updating case:', error);
+      alert(error.response?.data?.detail || 'Failed to update case');
     } finally {
-      setLoading(false);
+      setEditLoading(false);
     }
   };
 
   const handleDelete = async () => {
+    if (!canDeleteCase) {
+      alert('You do not have permission to delete cases.');
+      return;
+    }
     if (window.confirm('Are you sure you want to delete this case?')) {
       try {
         await casesAPI.delete(id);
         navigate('/cases');
       } catch (error) {
         console.error('Error deleting case:', error);
-        alert('Failed to delete case');
+        alert(error.response?.data?.detail || 'Failed to delete case');
       }
     }
   };
@@ -73,11 +170,7 @@ const CaseDetails = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
+    return <Loading fullScreen text="Loading case details..." />;
   }
 
   if (!caseData) {
@@ -113,20 +206,24 @@ const CaseDetails = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => navigate(`/cases/${id}/edit`)}
-            className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center gap-2"
-          >
-            <Edit className="w-4 h-4" />
-            Edit
-          </button>
-          <button
-            onClick={handleDelete}
-            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2"
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete
-          </button>
+          {canEditCase && (
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center gap-2"
+            >
+              <Edit className="w-4 h-4" />
+              Edit
+            </button>
+          )}
+          {canDeleteCase && (
+            <button
+              onClick={handleDelete}
+              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </button>
+          )}
         </div>
       </div>
 
@@ -266,7 +363,7 @@ const CaseDetails = () => {
                     <div key={item.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                       <div className="flex justify-between items-start">
                         <div>
-                          <h4 className="font-semibold text-gray-900">{item.title}</h4>
+                          <h4 className="font-semibold text-gray-900">{item.name}</h4>
                           <p className="text-sm text-gray-600 mt-1">{item.description}</p>
                           <div className="flex gap-2 mt-2">
                             <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
@@ -300,6 +397,149 @@ const CaseDetails = () => {
           )}
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-gray-900">Edit Case</h2>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleUpdate} className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                  <input
+                    type="text"
+                    value={editForm.title}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, title: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status *</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, status: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  >
+                    {CASE_STATUS_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Priority *</label>
+                  <select
+                    value={editForm.priority}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, priority: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  >
+                    {PRIORITY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Assign To</label>
+                  <select
+                    value={editForm.assigned_to}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, assigned_to: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  >
+                    <option value="">Unassigned</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.full_name} ({u.role})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Incident Date</label>
+                  <input
+                    type="datetime-local"
+                    value={editForm.incident_date}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, incident_date: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                  <input
+                    type="text"
+                    value={editForm.location}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, location: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
+                  rows={4}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  required
+                ></textarea>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
+                  <input
+                    type="text"
+                    value={editForm.client_name}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, client_name: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Client Contact</label>
+                  <input
+                    type="text"
+                    value={editForm.client_contact}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, client_contact: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editLoading}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <Save className="h-4 w-4" />
+                  {editLoading ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -4,13 +4,13 @@ A comprehensive full-stack web application for managing digital forensic evidenc
 
 ## Features
 
-- **Authentication & Authorization**: JWT-based authentication with role-based access control (Admin, Manager, Investigator)
-- **Case Management**: Create, track, and manage forensic investigation cases
-- **Evidence Management**: Upload, store, and track digital evidence with hash verification
-- **Chain of Custody**: Complete audit trail for evidence handling
-- **Report Generation**: Generate comprehensive case reports in PDF and text formats
-- **Dashboard**: Real-time statistics and recent activity monitoring
-- **Audit Logging**: Track all system activities for compliance
+- Authentication & Authorization: JWT-based authentication with role-based access control (Admin, Manager, Investigator)
+- Case Management: Create, track, and manage forensic investigation cases
+- Evidence Management: Upload, store, and track digital evidence with hash verification
+- Chain of Custody: Complete audit trail for evidence handling
+- Report Generation: Generate comprehensive case reports in PDF and text formats
+- Dashboard: Real-time statistics and recent activity monitoring
+- Audit Logging: Track all system activities for compliance
 
 ## Technology Stack
 

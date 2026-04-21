@@ -45,10 +45,12 @@ export const AuthProvider = ({ children }) => {
     try {
       // Call backend login API
       const response = await authAPI.login(username, password);
+      console.log('Login response:', response);
       
       // Get user details
       const userResponse = await usersAPI.me();
       const userData = userResponse.data;
+      console.log('User data:', userData);
       
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));

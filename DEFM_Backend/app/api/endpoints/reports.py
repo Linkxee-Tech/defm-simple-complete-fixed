@@ -119,30 +119,13 @@ async def generate_case_report(
         # Initialize report service
         report_service = ReportService(db)
         
-        # Generate report based on type
-        if format.lower() == "pdf":
-            file_path = await report_service.generate_pdf_report(
-                case=case,
-                report_type=report_type,
-                include_evidence=include_evidence,
-                include_custody=include_custody,
-                generated_by=current_user
-            )
-        else:
-            # Default to HTML/text format
-            content = await report_service.generate_text_report(
-                case=case,
-                report_type=report_type,
-                include_evidence=include_evidence,
-                include_custody=include_custody
-            )
-            
-            # Save as text file
-            filename = f"report_{case.case_number}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-            file_path = os.path.join("./reports", filename)
-            
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(content)
+        # Generate PDF report
+        report_obj = await report_service.generate_case_report(
+            case_id=case.id,
+            report_type=report_type,
+            generated_by=current_user.id
+        )
+        file_path = report_obj.file_path
         
         # Create report record
         db_report = Report(

@@ -217,3 +217,88 @@ async def create_case(
     logger.info(
         f"Case created: {db_case.case_number} by {current_user.username}")
     return db_case
+
+
+@router.put("/{case_id}", response_model=CaseSchema)
+async def update_case(
+    case_id: int,
+    case_update: CaseUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    audit_service: AuditService = Depends(get_audit_service)
+):
+    """Update a case. Only admin, manager, or assigned investigator can update."""
+    db_case = db.query(Case).filter(Case.id == case_id).first()
+    
+    if not db_case:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    
+    # Check permissions: admin or manager can edit any case
+    # Investigator can only edit if assigned to this case
+    if current_user.role.value not in ["admin", "manager"]:
+        if current_user.role.value == "investigator":
+            if db_case.assigned_to != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only edit cases assigned to you"
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions"
+            )
+    
+    # Update fields
+    update_data = case_update.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_case, field, value)
+    
+    db.commit()
+    db.refresh(db_case)
+    
+    await audit_service.log_action(
+        action="case_updated",
+        entity_type="case",
+        entity_id=db_case.id,
+        details=f"Updated case: {db_case.case_number}"
+    )
+    
+    logger.info(f"Case updated: {db_case.case_number} by {current_user.username}")
+    return db_case
+
+
+@router.delete("/{case_id}")
+async def delete_case(
+    case_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    audit_service: AuditService = Depends(get_audit_service)
+):
+    """Delete a case (admin/manager only)."""
+    if current_user.role.value not in ["admin", "manager"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    
+    db_case = db.query(Case).filter(Case.id == case_id).first()
+    
+    if not db_case:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    
+    case_number = db_case.case_number
+    
+    db.delete(db_case)
+    db.commit()
+    
+    await audit_service.log_action(
+        action="case_deleted",
+        entity_type="case",
+        entity_id=case_id,
+        details=f"Deleted case: {case_number}"
+    )
+    
+    logger.info(f"Case deleted: {case_number} by {current_user.username}")
+    return {"message": "Case deleted successfully"}

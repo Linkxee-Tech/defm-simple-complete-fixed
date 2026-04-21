@@ -75,12 +75,20 @@ async def create_user(
         )
     
     # Create new user
+    # Convert role string to UserRole enum
+    user_role = UserRole.investigator
+    if user_create.role:
+        try:
+            user_role = UserRole(user_create.role)
+        except ValueError:
+            pass
+    
     db_user = User(
         username=user_create.username,
         email=user_create.email,
         full_name=user_create.full_name,
         hashed_password=get_password_hash(user_create.password),
-        role=user_create.role,
+        role=user_role,
         is_active=user_create.is_active
     )
     

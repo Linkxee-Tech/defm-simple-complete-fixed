@@ -7,22 +7,40 @@ from app.schemas.schemas import ChainOfCustody as ChainOfCustodySchema, ChainOfC
 from app.api.dependencies import get_current_user, get_audit_service
 from app.services.audit_service import AuditService
 import logging
-from app.models.chain_of_custody import ChainOfCustody
 
-router = APIRouter(prefix="/chain-of-custody", tags=["Chain of Custody"])
-
-@router.get("/{evidence_id}")
-def get_chain(evidence_id: int, db: Session = Depends(get_db)):
-    return (
-        db.query(ChainOfCustody)
-        .filter(ChainOfCustody.evidence_id == evidence_id)
-        .order_by(ChainOfCustody.timestamp.asc())
-        .all()
-    )
-
-router = APIRouter()
+router = APIRouter(tags=["Chain of Custody"])
 logger = logging.getLogger(__name__)
 
+# Get custody records for specific evidence - MUST be before /{custody_id}
+@router.get("/evidence/{evidence_id}", response_model=List[ChainOfCustodySchema])
+async def read_evidence_custody_chain(
+    evidence_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get complete chain of custody for specific evidence."""
+    evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
+    if not evidence:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence not found"
+        )
+    
+    custody_records = (
+        db.query(ChainOfCustody)
+        .options(
+            selectinload(ChainOfCustody.handler_user),
+            selectinload(ChainOfCustody.evidence)
+        )
+        .filter(ChainOfCustody.evidence_id == evidence_id)
+        .order_by(ChainOfCustody.timestamp.desc())
+        .all()
+    )
+    
+    return custody_records
+
+
+# Main endpoint to list all custody records
 @router.get("/", response_model=List[ChainOfCustodySchema])
 async def read_chain_of_custody(
     skip: int = 0,
@@ -47,34 +65,8 @@ async def read_chain_of_custody(
     custody_records = query.offset(skip).limit(limit).all()
     return custody_records
 
-@router.get("/evidence/{evidence_id}", response_model=List[ChainOfCustodySchema])
-async def read_evidence_custody_chain(
-    evidence_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get complete chain of custody for specific evidence."""
-    # Verify evidence exists
-    evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
-    if not evidence:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Evidence not found"
-        )
-    
-    custody_records = (
-        db.query(ChainOfCustody)
-        .options(
-            selectinload(ChainOfCustody.handler_user),
-            selectinload(ChainOfCustody.evidence)
-        )
-        .filter(ChainOfCustody.evidence_id == evidence_id)
-        .order_by(ChainOfCustody.timestamp.desc())
-        .all()
-    )
-    
-    return custody_records
 
+# Get custody record by ID - must be last
 @router.get("/{custody_id}", response_model=ChainOfCustodySchema)
 async def read_custody_record(
     custody_id: int,

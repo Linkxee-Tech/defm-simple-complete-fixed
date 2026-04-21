@@ -58,10 +58,12 @@ class UserBase(BaseModel):
 
 
 class UserCreate(BaseModel):
+    username: str
     full_name: str
     email: EmailStr
     password: str
-    role: Optional[str] = "user"
+    role: Optional[str] = "investigator"
+    is_active: bool = True
 
 
 class UserUpdate(BaseModel):
