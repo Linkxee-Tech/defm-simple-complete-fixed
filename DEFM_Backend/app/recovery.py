@@ -1,4 +1,4 @@
-from satapi import FastAPI
+from fastapi import FastAPI
 
 app = FastAPI()
 
@@ -10,4 +10,4 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"oka": True}
+    return {"ok": True}

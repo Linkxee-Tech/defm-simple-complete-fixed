@@ -3,19 +3,26 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 from dotenv import load_dotenv
+from pathlib import Path
 import os
 
 # Ensure the database directory exists for SQLite
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Prefer explicit environment value, then fall back to configured default.
+DATABASE_URL = os.getenv("DATABASE_URL") or settings.DATABASE_URL
 
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL not set")
-
-# SQLite-specific handling (Windows safe)
+# Normalize relative SQLite paths to backend root so running from a different
+# working directory still points to the same database file.
 if DATABASE_URL.startswith("sqlite:///"):
     db_path = DATABASE_URL.replace("sqlite:///", "")
+    if not os.path.isabs(db_path):
+        backend_root = Path(__file__).resolve().parents[2]
+        normalized_path = (backend_root / db_path).resolve()
+        DATABASE_URL = f"sqlite:///{normalized_path.as_posix()}"
+        db_path = str(normalized_path)
+
+    # SQLite-specific handling (Windows safe)
     db_dir = os.path.dirname(db_path)
     if db_dir:
         os.makedirs(db_dir, exist_ok=True)

@@ -448,7 +448,7 @@ const Cases = () => {
                 type="datetime-local"
                 value={formData.incident_date}
                 onChange={(e) => setFormData((prev) => ({ ...prev, incident_date: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus.border-transparent"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
             <div>
@@ -556,7 +556,7 @@ const Cases = () => {
               </div>
               <div>
                 <p className="text-gray-500">Client Contact</p>
-                <p className="font-medium text.gray-900">{selectedCase.client_contact || 'N/A'}</p>
+                <p className="font-medium text-gray-900">{selectedCase.client_contact || 'N/A'}</p>
               </div>
               <div>
                 <p className="text-gray-500">Location</p>

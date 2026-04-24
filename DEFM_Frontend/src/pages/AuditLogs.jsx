@@ -7,7 +7,21 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const getDefaultApiBaseUrl = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  if (typeof window !== "undefined" && window.location?.origin) {
+    const frontendDevPorts = new Set(["3000", "5173", "5174"]);
+    if (frontendDevPorts.has(window.location.port)) {
+      return "http://127.0.0.1:8000";
+    }
+    return window.location.origin;
+  }
+  return "http://127.0.0.1:8000";
+};
+
+const API_BASE_URL = getDefaultApiBaseUrl();
 
 const AuditLogs = () => {
   const { user } = useAuth();

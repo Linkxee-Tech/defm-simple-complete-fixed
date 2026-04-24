@@ -135,13 +135,9 @@ const Reports = () => {
   };
 
   const filteredReports = useMemo(() => {
-    return reports.filter((item) => {
+    const filtered = reports.filter((item) => {
       const matchesSearch = searchTerm
-        ? [
-            item.title,
-            item.report_type,
-            item.case?.case_number,
-          ]
+        ? [item.title, item.report_type, item.case?.case_number]
             .filter(Boolean)
             .some((value) => value.toLowerCase().includes(searchTerm.toLowerCase()))
         : true;
@@ -149,6 +145,13 @@ const Reports = () => {
       const matchesType = typeFilter === 'all' || item.report_type === typeFilter;
 
       return matchesSearch && matchesType;
+    });
+
+    // UI guard: newest report first.
+    return filtered.sort((a, b) => {
+      const aTime = new Date(a.generated_at || 0).getTime();
+      const bTime = new Date(b.generated_at || 0).getTime();
+      return bTime - aTime;
     });
   }, [reports, searchTerm, typeFilter]);
 
@@ -181,7 +184,7 @@ const Reports = () => {
     );
   };
 
-  const GenerateReportForm = () => (
+  const generateReportForm = (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-200">
@@ -558,7 +561,7 @@ const Reports = () => {
         </div>
       )}
 
-      {showGenerateForm && <GenerateReportForm />}
+      {showGenerateForm && generateReportForm}
     </div>
   );
 };

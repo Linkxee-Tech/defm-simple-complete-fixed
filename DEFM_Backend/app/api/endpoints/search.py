@@ -1,104 +1,100 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
 from typing import List, Optional
-from app.core.database import get_db
+
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
+
 from app.api.dependencies import get_current_user
-from app.models.models import User
-from app.models.evidence import Evidence
-from app.models.case import Case
-from app.schemas.schemas import Evidence, Case
+from app.core.database import get_db
+from app.models.models import User, Evidence, Case, EvidenceType, CaseStatus
+from app.schemas.schemas import Evidence as EvidenceSchema, Case as CaseSchema
+
 import logging
 
 router = APIRouter(prefix="/search", tags=["Search"])
 logger = logging.getLogger(__name__)
 
-@router.get("/evidence", response_model=List[Evidence])
+
+@router.get("/evidence", response_model=List[EvidenceSchema])
 async def search_evidence(
     q: str = Query(..., min_length=1, description="Search query"),
     case_id: Optional[int] = Query(None, description="Filter by case ID"),
     evidence_type: Optional[str] = Query(None, description="Filter by evidence type"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-    """Search evidence by text query with optional filters."""
+    """Search evidence by number/title/description with optional filters."""
     try:
         query = db.query(Evidence)
-        
-        # Build search conditions
+
         search_conditions = [
-            Evidence.evidence_id.ilike(f"%{q}%"),
-            Evidence.display_name.ilike(f"%{q}%"),
-            Evidence.description.ilike(f"%{q}%")
+            Evidence.evidence_number.ilike(f"%{q}%"),
+            Evidence.title.ilike(f"%{q}%"),
+            Evidence.description.ilike(f"%{q}%"),
         ]
-        
         query = query.filter(or_(*search_conditions))
-        
-        # Apply additional filters
+
         if case_id:
             query = query.filter(Evidence.case_id == case_id)
-        
+
         if evidence_type:
-            query = query.filter(Evidence.evidence_type == evidence_type)
-        
-        # Role-based filtering
-        if current_user.role not in ['admin', 'forensic_lead']:
-            if current_user.role == 'investigator':
-                # Investigators can see evidence from their assigned cases
-                assigned_cases = db.query(Case).filter(Case.assigned_to == current_user.id).all()
-                case_ids = [case.id for case in assigned_cases]
-                query = query.filter(Evidence.case_id.in_(case_ids))
-            else:
-                # Other roles see only their own acquired evidence
-                query = query.filter(Evidence.acquired_by == current_user.id)
-        
-        results = query.limit(100).all()
-        return results
-        
+            try:
+                evidence_type_enum = EvidenceType(evidence_type)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid evidence type")
+            query = query.filter(Evidence.evidence_type == evidence_type_enum)
+
+        if current_user.role.value == "investigator":
+            assigned_case_ids = [
+                case_id for (case_id,) in db.query(Case.id).filter(Case.assigned_to == current_user.id).all()
+            ]
+            query = query.filter(Evidence.case_id.in_(assigned_case_ids or [-1]))
+
+        return query.limit(100).all()
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error searching evidence: {str(e)}")
+        logger.error("Error searching evidence: %s", str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Search failed"
+            detail="Search failed",
         )
 
-@router.get("/cases", response_model=List[Case])
+
+@router.get("/cases", response_model=List[CaseSchema])
 async def search_cases(
     q: str = Query(..., min_length=1, description="Search query"),
-    status: Optional[str] = Query(None, description="Filter by case status"),
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by case status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-    """Search cases by text query with optional status filter."""
+    """Search cases by number/title/description with optional status filter."""
     try:
         query = db.query(Case)
-        
-        # Build search conditions
+
         search_conditions = [
             Case.case_number.ilike(f"%{q}%"),
             Case.title.ilike(f"%{q}%"),
-            Case.description.ilike(f"%{q}%")
+            Case.description.ilike(f"%{q}%"),
         ]
-        
         query = query.filter(or_(*search_conditions))
-        
-        # Apply status filter
-        if status:
-            query = query.filter(Case.status == status)
-        
-        # Role-based filtering
-        if current_user.role not in ['admin', 'forensic_lead']:
-            if current_user.role == 'investigator':
-                query = query.filter(Case.assigned_to == current_user.id)
-            elif current_user.role == 'legal':
-                query = query.filter(Case.legal_flagged == True)
-        
-        results = query.limit(100).all()
-        return results
-        
+
+        if status_filter:
+            try:
+                status_enum = CaseStatus(status_filter)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid case status")
+            query = query.filter(Case.status == status_enum)
+
+        if current_user.role.value == "investigator":
+            query = query.filter(Case.assigned_to == current_user.id)
+
+        return query.limit(100).all()
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error searching cases: {str(e)}")
+        logger.error("Error searching cases: %s", str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Search failed"
+            detail="Search failed",
         )

@@ -54,7 +54,7 @@ class UserBase(BaseModel):
     is_active: bool = True
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class UserCreate(BaseModel):
@@ -64,6 +64,21 @@ class UserCreate(BaseModel):
     password: str
     role: Optional[str] = "investigator"
     is_active: bool = True
+
+    @validator("username", "full_name")
+    def normalize_user_text_fields(cls, value):
+        if value is None:
+            return value
+        value = value.strip()
+        if not value:
+            raise ValueError("Field cannot be empty")
+        return value
+
+    @validator("password")
+    def validate_create_password(cls, value):
+        if value is None or len(value) < 6:
+            raise ValueError("Password must be at least 6 characters long")
+        return value
 
 
 class UserUpdate(BaseModel):
@@ -106,6 +121,12 @@ class TokenData(BaseModel):
 class UserLogin(BaseModel):
     username: str
     password: str
+
+    @validator("username")
+    def normalize_username(cls, value):
+        if value is None:
+            return value
+        return value.strip()
 
 # Case schemas
 
@@ -164,7 +185,16 @@ class EvidenceBase(BaseModel):
 
 
 class EvidenceCreate(EvidenceBase):
-    case_id: int
+    case_id: Optional[int] = None
+
+    @validator("title")
+    def normalize_evidence_title(cls, value):
+        if value is None:
+            return value
+        value = value.strip()
+        if not value:
+            raise ValueError("Title is required")
+        return value
 
 
 class EvidenceUpdate(BaseModel):

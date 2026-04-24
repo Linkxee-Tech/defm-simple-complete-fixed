@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List
 from app.core.database import get_db
 from app.models.models import User, UserRole
@@ -58,8 +59,18 @@ async def create_user(
     audit_service: AuditService = Depends(get_audit_service)
 ):
     """Create new user (admin only)."""
+    username = user_create.username.strip()
+    email = user_create.email.strip().lower()
+    full_name = user_create.full_name.strip()
+
+    if not username or not email or not full_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username, email, and full name are required"
+        )
+
     # Check if username already exists
-    db_user = db.query(User).filter(User.username == user_create.username).first()
+    db_user = db.query(User).filter(func.lower(User.username) == username.lower()).first()
     if db_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -67,7 +78,7 @@ async def create_user(
         )
     
     # Check if email already exists
-    db_user = db.query(User).filter(User.email == user_create.email).first()
+    db_user = db.query(User).filter(func.lower(User.email) == email).first()
     if db_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -84,9 +95,9 @@ async def create_user(
             pass
     
     db_user = User(
-        username=user_create.username,
-        email=user_create.email,
-        full_name=user_create.full_name,
+        username=username,
+        email=email,
+        full_name=full_name,
         hashed_password=get_password_hash(user_create.password),
         role=user_role,
         is_active=user_create.is_active

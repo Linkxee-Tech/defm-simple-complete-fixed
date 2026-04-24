@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from datetime import timedelta, datetime
 from app.core.database import get_db
 from app.core.security import verify_password, create_access_token
@@ -19,11 +20,14 @@ async def login(
 ):
     """Authenticate user and return access token."""
     try:
+        username_input = user_credentials.username.strip()
         # Find user by username
-        user = db.query(User).filter(User.username == user_credentials.username).first()
+        user = db.query(User).filter(
+            func.lower(User.username) == username_input.lower()
+        ).first()
         
         if not user:
-            logger.warning(f"Login attempt with non-existent username: {user_credentials.username}")
+            logger.warning(f"Login attempt with non-existent username: {username_input}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password",
@@ -32,7 +36,7 @@ async def login(
         
         # Verify password
         if not verify_password(user_credentials.password, user.hashed_password):
-            logger.warning(f"Invalid password for user: {user_credentials.username}")
+            logger.warning(f"Invalid password for user: {username_input}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password",
@@ -46,9 +50,13 @@ async def login(
                 detail="Inactive user"
             )
         
-        # Update last login timestamp
-        user.last_login = datetime.utcnow()
-        db.commit()
+        # Update last login timestamp (non-blocking in readonly DB scenarios)
+        try:
+            user.last_login = datetime.utcnow()
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.warning(f"Could not update last_login for {user.username}: {e}")
         
         # Create access token
         access_token_expires = timedelta(minutes=30)
@@ -80,11 +88,14 @@ async def login_for_access_token(
 ):
     """OAuth2 compatible token endpoint."""
     try:
+        username_input = form_data.username.strip()
         # Find user by username
-        user = db.query(User).filter(User.username == form_data.username).first()
+        user = db.query(User).filter(
+            func.lower(User.username) == username_input.lower()
+        ).first()
         
         if not user:
-            logger.warning(f"Login attempt with non-existent username: {form_data.username}")
+            logger.warning(f"Login attempt with non-existent username: {username_input}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password",
@@ -93,7 +104,7 @@ async def login_for_access_token(
         
         # Verify password
         if not verify_password(form_data.password, user.hashed_password):
-            logger.warning(f"Invalid password for user: {form_data.username}")
+            logger.warning(f"Invalid password for user: {username_input}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password",
@@ -107,9 +118,13 @@ async def login_for_access_token(
                 detail="Inactive user"
             )
         
-        # Update last login timestamp
-        user.last_login = datetime.utcnow()
-        db.commit()
+        # Update last login timestamp (non-blocking in readonly DB scenarios)
+        try:
+            user.last_login = datetime.utcnow()
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.warning(f"Could not update last_login for {user.username}: {e}")
         
         # Create access token
         access_token_expires = timedelta(minutes=30)

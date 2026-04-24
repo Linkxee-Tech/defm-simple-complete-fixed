@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, Edit, Trash2, Download, Upload, Shield, 
+  ArrowLeft, Trash2, Download, Upload, Shield, 
   CheckCircle, AlertCircle, FileText, Hash, Clock 
 } from 'lucide-react';
 import { evidenceAPI, chainOfCustodyAPI } from '../services/api';
@@ -40,7 +40,7 @@ const EvidenceDetails = () => {
     try {
       setVerifying(true);
       const response = await evidenceAPI.verifyIntegrity(id);
-      alert(response.data.verified ? 'Integrity verified successfully!' : 'Integrity verification failed!');
+      alert(response.data.integrity_verified ? 'Integrity verified successfully!' : 'Integrity verification failed!');
       fetchDetails();
     } catch (error) {
       console.error('Error verifying integrity:', error);
@@ -76,6 +76,22 @@ const EvidenceDetails = () => {
         console.error('Error deleting evidence:', error);
         alert('Failed to delete evidence');
       }
+    }
+  };
+
+  const handleDownload = async () => {
+    try {
+      const response = await evidenceAPI.download(id);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', evidence.file_name || `evidence_${id}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      alert('Failed to download evidence file');
     }
   };
 
@@ -138,13 +154,6 @@ const EvidenceDetails = () => {
             {verifying ? 'Verifying...' : 'Verify Integrity'}
           </button>
           <button
-            onClick={() => navigate(`/evidence/${id}/edit`)}
-            className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center gap-2"
-          >
-            <Edit className="w-4 h-4" />
-            Edit
-          </button>
-          <button
             onClick={handleDelete}
             className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2"
           >
@@ -176,7 +185,7 @@ const EvidenceDetails = () => {
             </span>
           </div>
           <div>
-            {evidence.is_verified ? (
+            {evidence.file_hash ? (
               <span className="flex items-center text-green-600 text-sm">
                 <CheckCircle className="w-4 h-4 mr-1" />
                 Verified
@@ -245,7 +254,7 @@ const EvidenceDetails = () => {
                       onClick={() => navigate(`/cases/${evidence.case_id}`)}
                       className="text-primary-600 hover:text-primary-700"
                     >
-                      View Case →
+                      View Case ->
                     </button>
                   </div>
                 </div>
@@ -271,7 +280,10 @@ const EvidenceDetails = () => {
                       <p className="text-gray-900 text-xs font-mono break-all">{evidence.file_hash}</p>
                     </div>
                     <div>
-                      <button className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center gap-2">
+                      <button
+                        onClick={handleDownload}
+                        className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center gap-2"
+                      >
                         <Download className="w-4 h-4" />
                         Download File
                       </button>

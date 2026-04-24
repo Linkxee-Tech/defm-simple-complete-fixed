@@ -1,16 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 from typing import List, Optional
-from datetime import datetime
 import os
 from app.core.database import get_db
-from app.core.config import settings
 from app.models.models import Report, Case, User
 from app.schemas.schemas import Report as ReportSchema, ReportCreate
 from app.api.dependencies import get_current_user, get_audit_service
 from app.services.audit_service import AuditService
 from app.services.report_service import ReportService
-from fastapi.responses import StreamingResponse
 
 import logging
 
@@ -37,8 +35,14 @@ async def read_reports(
         query = query.filter(Report.case_id == case_id)
     if report_type:
         query = query.filter(Report.report_type == report_type)
-    
-    reports = query.offset(skip).limit(limit).all()
+
+    # Always return newest reports first.
+    reports = (
+        query.order_by(desc(Report.generated_at), desc(Report.id))
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     return reports
 
 @router.get("/{report_id}", response_model=ReportSchema)
@@ -127,38 +131,24 @@ async def generate_case_report(
         )
         file_path = report_obj.file_path
         
-        # Create report record
-        db_report = Report(
-            case_id=case_id,
-            title=f"{report_type.title()} Report - {case.case_number}",
-            content=f"Generated {report_type} report for case {case.case_number}",
-            report_type=report_type,
-            generated_by=current_user.id,
-            file_path=file_path
-        )
-        
-        db.add(db_report)
-        db.commit()
-        db.refresh(db_report)
-        
         # Log the action
         await audit_service.log_action(
             action="report_generated",
             entity_type="report",
-            entity_id=db_report.id,
+            entity_id=report_obj.id,
             details=f"Generated {format.upper()} {report_type} report for case {case.case_number}"
         )
         
         logger.info(f"Report generated: {file_path} by {current_user.username}")
         
         return {
-            "report_id": db_report.id,
+            "report_id": report_obj.id,
             "case_id": case_id,
             "case_number": case.case_number,
             "report_type": report_type,
             "format": format,
             "file_path": file_path,
-            "generated_at": db_report.generated_at.isoformat(),
+            "generated_at": report_obj.generated_at.isoformat(),
             "generated_by": current_user.full_name
         }
         

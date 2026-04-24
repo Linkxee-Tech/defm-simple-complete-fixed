@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, field_validator
 from typing import List
 import os
 
@@ -82,6 +82,19 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = False
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def parse_debug_value(cls, value):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on", "debug"}:
+                return True
+            if normalized in {"0", "false", "no", "off", "release", "prod", "production"}:
+                return False
+        return value
         
     @property
     def allowed_origins_list(self) -> List[str]:

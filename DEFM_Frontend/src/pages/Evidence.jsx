@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, Download, Trash2, Eye, FileText, Shield } from 'lucide-react';
-import { evidenceAPI, casesAPI } from '../services/api';
+import { evidenceAPI, casesAPI, extractApiErrorMessage } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import Loading from '../components/Loading';
 
@@ -31,17 +31,16 @@ const Evidence = () => {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [formError, setFormError] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [formData, setFormData] = useState({
-    name: '',
+    title: '',
     description: '',
     evidence_type: 'digital',
     case_id: '',
-    collected_date: '',
     location: '',
-    hash_value: '',
     notes: ''
   });
   const [selectedFile, setSelectedFile] = useState(null);
@@ -80,16 +79,31 @@ const Evidence = () => {
 
   const handleCreateEvidence = async (e) => {
     e.preventDefault();
+    const title = formData.title.trim();
+    const caseId = Number.parseInt(formData.case_id, 10);
+    const location = formData.location.trim();
+    const notes = formData.notes.trim();
+
+    if (!title) {
+      setFormError('Evidence name is required.');
+      return;
+    }
+    if (!Number.isInteger(caseId) || caseId <= 0) {
+      setFormError('Please select a valid case.');
+      return;
+    }
+
     try {
       setFormLoading(true);
+      setFormError('');
       
       const payload = {
-        title: formData.name,
-        description: formData.description || undefined,
+        title,
+        description: formData.description.trim() || undefined,
         evidence_type: formData.evidence_type,
-        case_id: Number(formData.case_id),
-        collection_location: formData.location || undefined,
-        collection_method: undefined
+        case_id: caseId,
+        collection_location: location || undefined,
+        collection_method: notes || undefined
         // status will use default 'collected'
       };
 
@@ -101,9 +115,7 @@ const Evidence = () => {
       
       // If there's a file selected, upload it
       if (selectedFile) {
-        const formDataFile = new FormData();
-        formDataFile.append('file', selectedFile);
-        await evidenceAPI.uploadFile(evidenceId, formDataFile);
+        await evidenceAPI.uploadFile(evidenceId, selectedFile);
       }
       
       await fetchEvidence();
@@ -112,7 +124,7 @@ const Evidence = () => {
       setSelectedFile(null);
     } catch (err) {
       console.error('Failed to create evidence', err.response?.data || err);
-      alert(err.response?.data?.detail || 'Failed to create evidence.');
+      setFormError(extractApiErrorMessage(err, 'Failed to create evidence.'));
     } finally {
       setFormLoading(false);
     }
@@ -149,26 +161,25 @@ const Evidence = () => {
 
   const resetForm = () => {
     setFormData({
-      name: '',
+      title: '',
       description: '',
       evidence_type: 'digital',
       case_id: '',
-      collected_date: '',
       location: '',
-      hash_value: '',
       notes: ''
     });
     setSelectedFile(null);
+    setFormError('');
   };
 
   const filteredEvidence = useMemo(() => {
     return evidenceItems.filter((item) => {
       const matchesSearch = searchTerm
         ? [
-            item.name,
+            item.title,
             item.evidence_number,
             item.description,
-            item.hash_value,
+            item.file_hash,
             item.case?.case_number,
           ]
             .filter(Boolean)
@@ -191,7 +202,7 @@ const Evidence = () => {
     return map[status] || 'bg-gray-100 text-gray-800';
   };
 
-  const AddEvidenceForm = () => (
+  const addEvidenceForm = (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-200">
@@ -199,13 +210,18 @@ const Evidence = () => {
         </div>
         
         <form onSubmit={handleCreateEvidence} className="p-6 space-y-4">
+          {formError && (
+            <div className="border border-red-200 bg-red-50 text-red-700 rounded-lg p-3 text-sm">
+              {formError}
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>             
               <label className="block text-sm font-medium text-gray-700 mb-1">Evidence Name *</label>
               <input
                 type="text"
-                value={formData.name}
-                onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+                value={formData.title}
+                onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 required
               />
@@ -241,29 +257,13 @@ const Evidence = () => {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Collection Date</label>
-              <input
-                type="datetime-local"
-                value={formData.collected_date}
-                onChange={(e) => setFormData((prev) => ({ ...prev, collected_date: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              />
+            <div className="md:col-span-1 flex items-center text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+              Collection timestamp and hash are generated automatically by the server.
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Hash Value (SHA-256)</label>
-              <input
-                type="text"
-                value={formData.hash_value}
-                onChange={(e) => setFormData((prev) => ({ ...prev, hash_value: e.target.value }))}
-                placeholder="e.g., a1b2c3d4e5f6..."
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
-              />
-            </div>
-            <div>
+            <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
               <input
                 type="text"
@@ -436,7 +436,7 @@ const Evidence = () => {
                   <tr key={evidence.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{evidence.name}</div>
+                        <div className="text-sm font-medium text-gray-900">{evidence.title}</div>
                         <div className="text-xs text-gray-500">{evidence.evidence_number}</div>
                       </div>
                     </td>
@@ -456,8 +456,8 @@ const Evidence = () => {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900 font-mono truncate max-w-xs" title={evidence.hash_value}>
-                        {evidence.hash_value || 'N/A'}
+                      <div className="text-sm text-gray-900 font-mono truncate max-w-xs" title={evidence.file_hash}>
+                        {evidence.file_hash || 'N/A'}
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -466,7 +466,7 @@ const Evidence = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
-                      {evidence.collected_date ? new Date(evidence.collected_date).toLocaleDateString() : 'N/A'}
+                      {evidence.collected_at ? new Date(evidence.collected_at).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end space-x-2">
@@ -503,7 +503,7 @@ const Evidence = () => {
         )}
       </div>
 
-      {showAddForm && <AddEvidenceForm />}
+      {showAddForm && addEvidenceForm}
     </div>
   );
 };

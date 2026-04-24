@@ -250,7 +250,7 @@ async def update_case(
             )
     
     # Update fields
-    update_data = case_update.dict(exclude_unset=True)
+    update_data = case_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_case, field, value)
     

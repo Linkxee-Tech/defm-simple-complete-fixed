@@ -1,5 +1,5 @@
 // src/pages/ChainOfCustody.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Calendar, FileText, Shield, Search, RefreshCw, Eye, Link as LinkIcon, ArrowRightLeft } from 'lucide-react';
 import { chainOfCustodyAPI, evidenceAPI, usersAPI } from '../services/api';
@@ -30,8 +30,12 @@ const ChainOfCustody = () => {
   useEffect(() => {
     fetchCustodyRecords();
     fetchEvidence();
-    fetchUsers();
-  }, []);
+    if (canManageCustody) {
+      fetchUsers();
+    } else {
+      setUsers([]);
+    }
+  }, [canManageCustody]);
 
   const fetchCustodyRecords = async () => {
     try {
@@ -62,6 +66,10 @@ const ChainOfCustody = () => {
   };
 
   const fetchUsers = async () => {
+    if (!canManageCustody) {
+      setUsers([]);
+      return;
+    }
     try {
       const response = await usersAPI.list({ limit: 200 });
       setUsers(response.data);
@@ -73,7 +81,25 @@ const ChainOfCustody = () => {
 
   const handleFilterChange = (evidenceId) => {
     setSelectedEvidence(evidenceId);
-    fetchCustodyRecords();
+    fetchCustodyRecordsWithFilter(evidenceId);
+  };
+
+  const fetchCustodyRecordsWithFilter = async (evidenceId) => {
+    try {
+      setLoading(true);
+      setError('');
+      const params = {};
+      if (evidenceId) {
+        params.evidence_id = evidenceId;
+      }
+      const response = await chainOfCustodyAPI.list(params);
+      setCustodyRecords(response.data);
+    } catch (err) {
+      console.error('Failed to load custody records', err);
+      setError(err.response?.data?.detail || 'Failed to load chain of custody records.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCreateTransfer = async (e) => {
@@ -118,13 +144,26 @@ const ChainOfCustody = () => {
 
   const getEvidenceName = (evidenceId) => {
     const evidence = evidenceItems.find(e => e.id === evidenceId);
-    return evidence ? `${evidence.evidence_number} - ${evidence.name}` : `Evidence #${evidenceId}`;
+    return evidence ? `${evidence.evidence_number} - ${evidence.title}` : `Evidence #${evidenceId}`;
   };
 
   const getUserName = (userId) => {
-    const u = users.find(user => user.id === userId);
+    const u = usersById.get(userId);
     return u ? u.full_name : `User #${userId}`;
   };
+
+  const usersById = useMemo(() => {
+    const map = new Map();
+    users.forEach((u) => {
+      map.set(u.id, u);
+    });
+    custodyRecords.forEach((record) => {
+      if (record.handler_user?.id && !map.has(record.handler_user.id)) {
+        map.set(record.handler_user.id, record.handler_user);
+      }
+    });
+    return map;
+  }, [users, custodyRecords]);
 
   const groupRecordsByEvidence = () => {
     const grouped = {};
@@ -138,7 +177,7 @@ const ChainOfCustody = () => {
     return grouped;
   };
 
-  const TransferForm = () => (
+  const transferForm = (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-200">
@@ -155,11 +194,11 @@ const ChainOfCustody = () => {
               required
             >
               <option value="">Select evidence</option>
-              {evidenceItems.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.evidence_number} - {e.name}
-                </option>
-              ))}
+                {evidenceItems.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.evidence_number} - {e.title}
+                  </option>
+                ))}
             </select>
           </div>
 
@@ -294,7 +333,7 @@ const ChainOfCustody = () => {
               <option value="">All Evidence</option>
               {evidenceItems.map((e) => (
                 <option key={e.id} value={e.id}>
-                  {e.evidence_number} - {e.name}
+                  {e.evidence_number} - {e.title}
                 </option>
               ))}
             </select>
@@ -408,7 +447,7 @@ const ChainOfCustody = () => {
         </div>
       )}
 
-      {showTransferForm && <TransferForm />}
+      {showTransferForm && transferForm}
     </div>
   );
 };

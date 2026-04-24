@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
@@ -24,20 +25,14 @@ app = FastAPI(
     lifespan=lifespan  # Use the imported lifespan
 )
 
-# Add CORS middleware
+# Add CORS middleware with relaxed settings to prevent preflight OPTIONS 400 errors
 app.add_middleware(
     CORSMiddleware,
-    allow_origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:5174",
-    "http://127.0.0.1:5174",
-],
+    allow_origins=["*"],
+    allow_origin_regex=r".*",
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Accept"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Include API routes
@@ -90,6 +85,15 @@ async def internal_error_handler(request, exc):
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"}
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    """Handle validation errors with structured details for frontend forms."""
+    logger.warning(f"Validation error on {request.url.path}: {exc.errors()}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()}
     )
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 // src/pages/UserManagement.jsx
 import React, { useState, useEffect } from 'react';
 import { Users, Plus, Edit, Trash2, Shield, Search, Filter } from 'lucide-react';
-import { usersAPI } from '../services/api';
+import { usersAPI, extractApiErrorMessage } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const UserManagement = () => {
@@ -12,6 +12,7 @@ const UserManagement = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [formError, setFormError] = useState('');
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -39,18 +40,41 @@ const UserManagement = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const payload = {
+      ...formData,
+      username: formData.username.trim(),
+      email: formData.email.trim(),
+      full_name: formData.full_name.trim(),
+      password: formData.password,
+    };
+
+    if (!payload.username || !payload.email || !payload.full_name) {
+      setFormError('Username, email, and full name are required.');
+      return;
+    }
+    if (!selectedUser && (!payload.password || payload.password.length < 6)) {
+      setFormError('Password must be at least 6 characters.');
+      return;
+    }
+
     try {
+      setFormError('');
+      
       if (selectedUser) {
-        await usersAPI.update(selectedUser.id, formData);
+        // If updating and password is left blank, remove it so the backend doesn't throw a validation error
+        if (!payload.password) {
+          delete payload.password;
+        }
+        await usersAPI.update(selectedUser.id, payload);
       } else {
-        await usersAPI.create(formData);
+        await usersAPI.create(payload);
       }
       setShowModal(false);
       resetForm();
       fetchUsers();
     } catch (error) {
       console.error('Error saving user:', error);
-      alert(error.response?.data?.detail || 'Failed to save user');
+      setFormError(extractApiErrorMessage(error, 'Failed to save user.'));
     }
   };
 
@@ -81,6 +105,7 @@ const UserManagement = () => {
 
   const resetForm = () => {
     setSelectedUser(null);
+    setFormError('');
     setFormData({
       username: '',
       email: '',
@@ -243,6 +268,11 @@ const UserManagement = () => {
               {selectedUser ? 'Edit User' : 'Add New User'}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {formError && (
+                <div className="border border-red-200 bg-red-50 text-red-700 rounded-lg p-3 text-sm">
+                  {formError}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
                 <input

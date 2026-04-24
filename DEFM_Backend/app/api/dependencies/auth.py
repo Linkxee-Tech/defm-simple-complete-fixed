@@ -7,7 +7,9 @@ from app.models.models import User
 from app.services.audit_service import AuditService
 import logging
 
-security = HTTPBearer()
+# Use auto_error=False so we can return consistent 401 responses instead of
+# default 403 from HTTPBearer when token/header is missing.
+security = HTTPBearer(auto_error=False)
 logger = logging.getLogger(__name__)
 
 # async def get_current_user(
@@ -47,7 +49,7 @@ logger = logging.getLogger(__name__)
 #     return user
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: Session = Depends(get_db)
 ) -> User:
     """Get current authenticated user."""
@@ -57,12 +59,16 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    if credentials is None or not credentials.credentials:
+        logger.warning("Missing Authorization bearer token")
+        raise credentials_exception
+
     try:
         token = credentials.credentials
-        token_data = verify_token(token)  # <-- returns dict
-        logger.info(f'=========token_data: {token_data}')
-        username = token_data.get('sub')  # <-- extract string
-        logger.info(f'=========username: {username}')
+        token_data = verify_token(token)
+        if not token_data:
+            raise credentials_exception
+        username = token_data.get("sub")
         
         if username is None:
             logger.warning(f"Token decoded but username not found: {token_data}")

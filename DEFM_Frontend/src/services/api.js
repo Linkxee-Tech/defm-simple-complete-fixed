@@ -2,7 +2,21 @@
 import axios from 'axios';
 
 // Create axios instance with base configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+const getDefaultApiBaseUrl = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  if (typeof window !== "undefined" && window.location?.origin) {
+    const frontendDevPorts = new Set(["3000", "5173", "5174"]);
+    if (frontendDevPorts.has(window.location.port)) {
+      return "http://127.0.0.1:8000";
+    }
+    return window.location.origin;
+  }
+  return "http://127.0.0.1:8000";
+};
+
+const API_BASE_URL = getDefaultApiBaseUrl();
 
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api/v1`,
@@ -12,6 +26,28 @@ const api = axios.create({
   timeout: 30000, // 30 seconds
   
 });
+
+export const extractApiErrorMessage = (error, fallback = 'Request failed.') => {
+  const detail = error?.response?.data?.detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (!item) return null;
+        const loc = Array.isArray(item.loc) ? item.loc.join('.') : '';
+        const msg = item.msg || 'Invalid value';
+        return loc ? `${loc}: ${msg}` : msg;
+      })
+      .filter(Boolean)
+      .join(' | ');
+  }
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail;
+  }
+  if (error?.message) {
+    return error.message;
+  }
+  return fallback;
+};
 
 // Health check function (uses base URL, not /api/v1)
 export const healthCheck = async () => {

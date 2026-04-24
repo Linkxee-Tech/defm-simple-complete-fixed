@@ -58,12 +58,17 @@ const CaseDetails = () => {
   }, [user, caseData]);
 
   const canDeleteCase = user?.role === 'admin' || user?.role === 'manager';
+  const canManageAssignments = user?.role === 'admin' || user?.role === 'manager';
 
   useEffect(() => {
     fetchCaseDetails();
     fetchEvidence();
-    fetchUsers();
-  }, [id]);
+    if (canManageAssignments) {
+      fetchUsers();
+    } else {
+      setUsers([]);
+    }
+  }, [id, canManageAssignments]);
 
   const fetchCaseDetails = async () => {
     try {
@@ -363,7 +368,7 @@ const CaseDetails = () => {
                     <div key={item.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                       <div className="flex justify-between items-start">
                         <div>
-                          <h4 className="font-semibold text-gray-900">{item.name}</h4>
+                          <h4 className="font-semibold text-gray-900">{item.title}</h4>
                           <p className="text-sm text-gray-600 mt-1">{item.description}</p>
                           <div className="flex gap-2 mt-2">
                             <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
@@ -378,7 +383,7 @@ const CaseDetails = () => {
                           onClick={() => navigate(`/evidence/${item.id}`)}
                           className="text-primary-600 hover:text-primary-700 text-sm font-medium"
                         >
-                          View Details →
+                          View Details ->
                         </button>
                       </div>
                     </div>
@@ -458,6 +463,7 @@ const CaseDetails = () => {
                     value={editForm.assigned_to}
                     onChange={(e) => setEditForm((prev) => ({ ...prev, assigned_to: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    disabled={!canManageAssignments}
                   >
                     <option value="">Unassigned</option>
                     {users.map((u) => (
@@ -466,6 +472,9 @@ const CaseDetails = () => {
                       </option>
                     ))}
                   </select>
+                  {!canManageAssignments && (
+                    <p className="text-xs text-gray-500 mt-1">Only admin/manager can reassign cases.</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Incident Date</label>
